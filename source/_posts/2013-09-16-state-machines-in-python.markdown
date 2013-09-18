@@ -44,7 +44,7 @@ categories: [pyhon, state machines, event-driven]
 
 **Решение:**
  
- *Определим колличество возможных состояний.*
+*Определим колличество возможных состояний.*
 
 #####Возможные состояния: 
  + Начальное состояние - `plain_text`
@@ -113,26 +113,10 @@ class SimpleMark(object):
                 self.__buffer += '<i>' + symbol
             else:
                 self.__buffer += symbol
-
-    def __call__(self, line):
-        for symbol in line:
-            self.__handle_input(symbol)
-        return self.__buffer
-
-if __name__ == '__main__':
-    test_line = "Plain text **BOLD** *Italic* **BOLD** Plain *Italic* Plain"
-    handler = SimpleMark()
-    print handler(test_line)    
-```
-#TODO: Функтор
-*Результат:*
-
-```bash
-$python simple_mark.py
-Plain text <b>BOLD</b> <i>Italic</i> <b>BOLD</b> Plain <i>Italic</i> Plain
+ 
 ```
 
-Работает! Но выглядит как то *не_очень*, правда?
+Пока выглядит как то *не_очень*, правда?
 
 Давайте попробуем зарефакторить наш код. 
 Во-первых, куча `if, elif и else` выглядит не приятно (особенно, если в вашем любимом языке программирования есть конструкция `switch/case`). Во-вторых, было бы не плохо вынести работу каждого шага в отдельную функцию (что с точки зрения автоматов является идеологический верным).
@@ -192,15 +176,6 @@ class SimpleMark(object):
             else:
                 self.__buffer += symbol
 
-    def __call__(self, line):
-        for symbol in line:
-            self.__handle_input(symbol)
-        return self.__buffer
-
-if __name__ == '__main__':
-    test_line = "Plain text **BOLD** *Italic* **BOLD** Plain *Italic* Plain"
-    handler = SimpleMark()
-    print handler(test_line)
 ```
 
 *А теперь воспользуемся обычным рецептом эмуляции `switch/case`:*
@@ -238,7 +213,7 @@ class SimpleMark(object):
 
     def __set_end_bold(self):
         self.__buffer += '</b>'
-        self.__state = self.PLAIN_TEXT
+        self.__state = self.PLAIN_TEX
 
     def __update_buffer(self, symbol):
         self.__buffer += symbol
@@ -265,18 +240,10 @@ class SimpleMark(object):
         else:
             jump_table_2[self.__state](symbol)
 
-    def __call__(self, line):
-        for symbol in line:
-            self.__handle_input(symbol)
-        return self.__buffer
-
-if __name__ == '__main__':
-    test_line = "Plain text **BOLD** *Italic* **BOLD** Plain *Italic* Plain"
-    handler = SimpleMark()
-    print handler(test_line)
 ```
-##TODO: USE Assert for test
 
-Помимо того что я использовал словарь что бы определить связь состояние-действие для каждого из возможных состояний, я выделил ещё одну функцию __update_buffer, что бы была возможность явно описать переходы для второй строчки (в коде `jump_table_2`) в нашей таблице.
+Помимо того что я использовал словарь что бы определить связь состояние-действие для каждого из возможных состояний, я выделил ещё одну функцию `__update_buffer`, что бы была возможность явно описать переходы для второй строчки (в коде `jump_table_2`) нашей таблицы.
+
+Вообще, раз это автомат, то у него должен быть цикл работы. Ну так давай те же напишем его!
 
 
