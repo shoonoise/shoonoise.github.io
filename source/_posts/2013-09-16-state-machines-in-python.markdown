@@ -98,21 +98,21 @@ class SimpleMark(object):
                 self.__state = self.PRE_BOLD
             elif self.__state == self.PRE_BOLD:
                 self.__state = self.BOLD
-                self.__buffer += '<b>'
+                self.__buffer = '<b>'
             elif self.__state == self.BOLD:
                 self.__state = self.PRE_END_BOLD
             elif self.__state == self.ITALIC:
                 self.__state = self.PLAIN_TEXT
-                self.__buffer += '</i>'
+                self.__buffer = '</i>'
             elif self.__state == self.PRE_END_BOLD:
-                self.__buffer += '</b>'
+                self.__buffer = '</b>'
                 self.__state = self.PLAIN_TEXT
         else:
             if self.__state == self.PRE_BOLD:
                 self.__state = self.ITALIC
-                self.__buffer += '<i>' + symbol
+                self.__buffer = '<i>' + symbol
             else:
-                self.__buffer += symbol
+                self.__buffer = symbol
  
 ```
 
@@ -141,21 +141,21 @@ class SimpleMark(object):
 
     def __set_bold(self):
         self.__state = self.BOLD
-        self.__buffer += '<b>'
+        self.__buffer = '<b>'
 
     def __set_pre_end_bold(self):
         self.__state = self.PRE_END_BOLD
 
     def __set_italic(self, symbol):
         self.__state = self.ITALIC
-        self.__buffer += '<i>' + symbol
+        self.__buffer = '<i>' + symbol
 
     def __set_end_italic(self):
         self.__state = self.PLAIN_TEXT
-        self.__buffer += '</i>'
+        self.__buffer = '</i>'
 
     def __set_end_bold(self):
-        self.__buffer += '</b>'
+        self.__buffer = '</b>'
         self.__state = self.PLAIN_TEXT
 
     def __handle_input(self, symbol):
@@ -174,7 +174,7 @@ class SimpleMark(object):
             if self.__state == self.PRE_BOLD:
                 self.__set_italic(symbol)
             else:
-                self.__buffer += symbol
+                self.__buffer = symbol
 
 ```
 
@@ -198,25 +198,25 @@ class SimpleMark(object):
 
     def __set_bold(self):
         self.__state = self.BOLD
-        self.__buffer += '<b>'
+        self.__buffer = '<b>'
 
     def __set_pre_end_bold(self):
         self.__state = self.PRE_END_BOLD
 
     def __set_italic(self, symbol):
         self.__state = self.ITALIC
-        self.__buffer += '<i>' + symbol
+        self.__buffer = '<i>' + symbol
 
     def __set_end_italic(self):
         self.__state = self.PLAIN_TEXT
-        self.__buffer += '</i>'
+        self.__buffer = '</i>'
 
     def __set_end_bold(self):
-        self.__buffer += '</b>'
+        self.__buffer = '</b>'
         self.__state = self.PLAIN_TEX
 
     def __update_buffer(self, symbol):
-        self.__buffer += symbol
+        self.__buffer = symbol
 
     def __handle_input(self, symbol):
         jump_table_1 = {
@@ -332,3 +332,13 @@ if __name__ == '__main__':
 
  - Уменьшил колличество мест, где меняется состояние выхода нашего автомата до 2-х (ибо нефиг)
 
+ - Теперь значения выхода не накапливается в буффере, он теперь хранит только последнее значение
+
+Такой подход добавляет реактивность в наш обработчик. 
+
+### Что ещё?
+
+Если сделать интерактивный ввод, то это позволит получать результат обработки одновременно с вводом.
+Так же возможно реализовать метод обработки события "удаление символа", которое будет откатывать автомат в предыдущее состояние.
+
+На этом пока всё. Замечания, по прежнему, принимаются на shoonoise@gmail.com.
