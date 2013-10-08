@@ -1,0 +1,771 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Автоматное программирование - Blog pythonista</title>
+	<meta name="author" content="Alexander Kushnarev">
+
+	
+	<meta name="description" content="Вместо эпиграфа приведу цитату умного человека. Касющуюся, впрочем, конкреного event-driven программирования: «Компьютер — это конечный автомат. &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom.xml" rel="alternate" title="Blog pythonista" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script async="true" src="//ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">Blog pythonista</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:shoonoise.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		<a class="twitter" href="http://twitter.com/shoonoise" title="Twitter">Twitter</a>
+		
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom.xml" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:shoonoise.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">Автоматное программирование</h2>
+	<div class="entry-content"><p>Вместо эпиграфа приведу <a href="http://lkml.indiana.edu/hypermail/linux/kernel/0106.2/0405.html">цитату</a> умного <a href="http://ru.wikipedia.org/wiki/%D0%90%D0%BB%D0%B0%D0%BD_%D0%9A%D0%BE%D0%BA%D1%81">человека</a>. Касющуюся, впрочем, конкреного event-driven программирования:</p>
+
+<blockquote><p>«Компьютер — это конечный автомат. Потоковое программирование нужно тем, кто не умеет программировать конечные автоматы»</p></blockquote>
+
+<p>Так как никто не хочет быть в категории “неумех”, я сегодня постараюсь показать приём программирования условного автомата.</p>
+
+<p>В статье я буду пошагово описывать создание своего обработчика простой разметки текста на Python.</p>
+
+<!-- more -->
+
+
+<h3>Немного теории</h3>
+
+<p>Вместо того косноязычного определения что могу дать я, приведу цитату из википедии:</p>
+
+<blockquote><p>Автома́тное программи́рование — это парадигма программирования, при использовании которой программа или её фрагмент осмысливается как модель какого-либо формального автомата. В зависимости от конкретной задачи в автоматном программировании могут использоваться как конечные автоматы, так и автоматы более сложной структуры.</p></blockquote>
+
+<p>Давайте поговорим о автомате (<em>State Machine</em>). Чем он у нас определяется?</p>
+
+<ul>
+<li>Входные данные (с заранее известным возможным набором данных или алфавитом).</li>
+<li>Конечное множество состояний, которые может принимать автомат.</li>
+<li>Начальное состояние.</li>
+<li>Таблица переходов, определяющая правила перехода из состояния в состояние в зависимости от текущего состояния и входного значения (у нас детерминированный автомат).</li>
+</ul>
+
+
+<p><em>Если вы не прогуливали теорию автоматов в ВУЗе, как я, то вы и так это всё знаете.</em></p>
+
+<h3>Практика</h3>
+
+<p><strong>Задача:</strong></p>
+
+<p>В качестве задания я решил взять типичную для программирования автоматов задачу &ndash; простенький обработчик разметки.</p>
+
+<p>Наш обработчик будет поддерживать только 2 типа разметки:</p>
+
+<ul>
+<li>*<em>курсивное</em>* начертание</li>
+<li>**<strong>жирное</strong>** начертание</li>
+</ul>
+
+
+<p>На входе строка, в которой строки размеченны с помощью * и **, а на выходе &ndash; форматированный HTML.</p>
+
+<p><strong>Решение:</strong></p>
+
+<p><em>Определим количество возможных состояний.</em></p>
+
+<h5>Возможные состояния:</h5>
+
+<ul>
+<li>Начальное состояние &ndash; <code>plain_text</code></li>
+<li>Состояние <code>pre_bold</code> &ndash; когда встретили первую <code>*</code></li>
+<li>Состояние <code>bold</code> &ndash; когда встретили вторую <code>*</code> вподряд</li>
+<li>Состояние <code>italic</code> &ndash; когда после первой <code>*</code> у нас, по крайней мере, один обычный символ</li>
+<li>Состояние <code>pre_end_dold</code> &ndash; когда встретили первую закрывающую <code>*</code></li>
+</ul>
+
+
+<p>Как вы могли заметить, нам пришлось внести два не самых очевидных состояния &ndash; <code>pre_bold</code> и <code>pre_end_bold</code>.
+Дело в том, что когда мы получаем первый символ <code>*</code>, мы не можем однозначно сказать что от нас требуется италик или болд, и требуется ли вообще менять состояние, поэтому мы вынуждены ввести некие &ldquo;промежуточные&rdquo; состояния (костыль для сохранения детерминированности. Увеличиваем таблицу переходов, но упрощаем логику).</p>
+
+<p> <em>Определим правила перехода из одного состояние в другое.</em></p>
+
+<h5>Таблица переходов:</h5>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Input \ State</th>
+<th>plain_text  </th>
+<th>pre_bold    </th>
+<th>bold          </th>
+<th>italic        </th>
+<th>pre_end_bold</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td>*             </td>
+<td>pre_bold    </td>
+<td>bold        </td>
+<td>pre_end_bold  </td>
+<td>plain_text    </td>
+<td>plain_text  </td>
+</tr>
+<tr>
+<td></td>
+<td>other symbol  </td>
+<td>plain_text  </td>
+<td>italic      </td>
+<td>plain_text    </td>
+<td>plain_text    </td>
+<td>plain_text  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>В строках у нас описаны входные символы, у нас их может быть всего 2 типа: символ <code>*</code> и любой другой символ.
+В столбцах у нас описаны все наши состояния. На пересечении &ndash; состояние в которое переходим.
+То есть если мы находимся в состоянии <code>plain_text</code> и получаем на вход <code>*</code>, то мы переходим в состояние <code>pre_bold</code>.
+А в случае, если мы в состоянии <code>pre_bold</code> и получаем на вход символ отличный от <code>*</code>, то мы переходим в состоние <code>italic</code>.</p>
+
+<h3>Кодирование</h3>
+
+<p>А теперь самое интересное &ndash; перевод нашего решениея в код.</p>
+
+<p>В первом приближении у меня получилось, следующее:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">SimpleMark</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">PLAIN_TEXT</span> <span class="o">=</span> <span class="s">&#39;plain_text&#39;</span>
+</span><span class='line'>    <span class="n">PRE_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_bold&#39;</span>
+</span><span class='line'>    <span class="n">BOLD</span> <span class="o">=</span> <span class="s">&#39;bold&#39;</span>
+</span><span class='line'>    <span class="n">ITALIC</span> <span class="o">=</span> <span class="s">&#39;italic&#39;</span>
+</span><span class='line'>    <span class="n">PRE_END_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_end_bold&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__handle_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">symbol</span> <span class="o">==</span> <span class="s">&#39;*&#39;</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;b&gt;&#39;</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;/i&gt;&#39;</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;/b&gt;&#39;</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;i&gt;&#39;</span> <span class="o">+</span> <span class="n">symbol</span>
+</span><span class='line'>            <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="n">symbol</span>
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Пока выглядит как то <em>не_очень</em>, правда?</p>
+
+<p>Давайте попробуем зарефакторить наш код.</p>
+
+<p>Во-первых, куча <code>if, elif и else</code> выглядит неприятно (особенно, если в вашем любимом языке программирования есть конструкция <code>switch/case</code>). Во-вторых, было бы не плохо вынести работу каждого шага в отдельную функцию (что с точки зрения автоматов является идеологический верным).</p>
+
+<p><em>Вынесем работу шагов автомата в функции:</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">SimpleMark</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">PLAIN_TEXT</span> <span class="o">=</span> <span class="s">&#39;plain_text&#39;</span>
+</span><span class='line'>    <span class="n">PRE_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_bold&#39;</span>
+</span><span class='line'>    <span class="n">BOLD</span> <span class="o">=</span> <span class="s">&#39;bold&#39;</span>
+</span><span class='line'>    <span class="n">ITALIC</span> <span class="o">=</span> <span class="s">&#39;italic&#39;</span>
+</span><span class='line'>    <span class="n">PRE_END_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_end_bold&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_pre_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;b&gt;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_pre_end_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_italic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;i&gt;&#39;</span> <span class="o">+</span> <span class="n">symbol</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_end_italic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;/i&gt;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_end_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;/b&gt;&#39;</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__handle_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">symbol</span> <span class="o">==</span> <span class="s">&#39;*&#39;</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__set_pre_bold</span><span class="p">()</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__set_bold</span><span class="p">()</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__set_pre_end_bold</span><span class="p">()</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__set_end_italic</span><span class="p">()</span>
+</span><span class='line'>            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__set_end_bold</span><span class="p">()</span>
+</span><span class='line'>        <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__set_italic</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span>
+</span><span class='line'>            <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>                <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="n">symbol</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>А теперь воспользуемся обычным рецептом эмуляции <code>switch/case</code>:</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">SimpleMark</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">PLAIN_TEXT</span> <span class="o">=</span> <span class="s">&#39;plain_text&#39;</span>
+</span><span class='line'>    <span class="n">PRE_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_bold&#39;</span>
+</span><span class='line'>    <span class="n">BOLD</span> <span class="o">=</span> <span class="s">&#39;bold&#39;</span>
+</span><span class='line'>    <span class="n">ITALIC</span> <span class="o">=</span> <span class="s">&#39;italic&#39;</span>
+</span><span class='line'>    <span class="n">PRE_END_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_end_bold&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_pre_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;b&gt;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_pre_end_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_italic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;i&gt;&#39;</span> <span class="o">+</span> <span class="n">symbol</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_end_italic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;/i&gt;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_end_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="s">&#39;&lt;/b&gt;&#39;</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEX</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__update_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="n">symbol</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__handle_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="n">jump_table_1</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_pre_bold</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_bold</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_pre_end_bold</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_end_italic</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_end_bold</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="n">jump_table_2</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_italic</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">if</span> <span class="n">symbol</span> <span class="o">==</span> <span class="s">&#39;*&#39;</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">jump_table_1</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">__state</span><span class="p">]()</span>
+</span><span class='line'>        <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">jump_table_2</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">__state</span><span class="p">](</span><span class="n">symbol</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Помимо того что я использовал словарь, что бы определить связь состояние-действие для каждого из возможных состояний, я выделил ещё одну функцию <code>__update_buffer</code>, что бы была возможность явно описать переходы для второй строчки (в коде <code>jump_table_2</code>) нашей таблицы.</p>
+
+<p>Теперь сделаем наш автомат &ldquo;рабочим&rdquo;.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="k">class</span> <span class="nc">SimpleMark</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">PLAIN_TEXT</span> <span class="o">=</span> <span class="s">&#39;plain_text&#39;</span>
+</span><span class='line'>    <span class="n">PRE_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_bold&#39;</span>
+</span><span class='line'>    <span class="n">BOLD</span> <span class="o">=</span> <span class="s">&#39;bold&#39;</span>
+</span><span class='line'>    <span class="n">ITALIC</span> <span class="o">=</span> <span class="s">&#39;italic&#39;</span>
+</span><span class='line'>    <span class="n">PRE_END_BOLD</span> <span class="o">=</span> <span class="s">&#39;pre_end_bold&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nd">@property</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">output</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">try</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+</span><span class='line'>        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+</span><span class='line'>            <span class="k">print</span> <span class="s">&quot;Have no output data yet.&quot;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nd">@property</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">result</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_pre_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span>
+</span><span class='line'>        <span class="k">return</span> <span class="s">&#39;&lt;b&gt;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_pre_end_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_italic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span>
+</span><span class='line'>        <span class="k">return</span> <span class="s">&#39;&lt;i&gt;&#39;</span> <span class="o">+</span> <span class="n">symbol</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_end_italic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="k">return</span> <span class="s">&#39;&lt;/i&gt;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__set_end_bold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span>
+</span><span class='line'>        <span class="k">return</span> <span class="s">&#39;&lt;/b&gt;&#39;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__update_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">symbol</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__handle_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="n">jump_table_1</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_pre_bold</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_bold</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_pre_end_bold</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_end_italic</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_end_bold</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="n">jump_table_2</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PLAIN_TEXT</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_italic</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">ITALIC</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span><span class="p">,</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">PRE_END_BOLD</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">__update_buffer</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">if</span> <span class="n">symbol</span> <span class="o">==</span> <span class="s">&#39;*&#39;</span><span class="p">:</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="n">jump_table_1</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">__state</span><span class="p">]()</span> <span class="ow">or</span> <span class="s">&#39;&#39;</span>
+</span><span class='line'>        <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">__buffer</span> <span class="o">+=</span> <span class="n">jump_table_2</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">__state</span><span class="p">](</span><span class="n">symbol</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__handle_input</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+</span><span class='line'>    <span class="n">machine</span> <span class="o">=</span> <span class="n">SimpleMark</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">line</span> <span class="o">=</span> <span class="s">&quot;*italic* **BOLD** plain **BOLD** *italic*&quot;</span>
+</span><span class='line'>    <span class="k">for</span> <span class="n">symbol</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">machine</span><span class="o">.</span><span class="n">input</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">print</span> <span class="n">machine</span><span class="o">.</span><span class="n">result</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Изменения:</p>
+
+<ul>
+<li><p>Добавил свойство output, которое возвращает текущее значение на выходе нашего автомата</p></li>
+<li><p>Добавил метод input</p></li>
+<li><p>Уменьшил количество мест, где меняется состояние выхода нашего автомата до 2-х (ибо нефиг)</p></li>
+</ul>
+
+
+<p>Результат:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="err">$</span> <span class="err">⮀</span> <span class="n">python</span> <span class="n">state_machine</span><span class="o">.</span><span class="n">py</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">i</span><span class="o">&gt;</span><span class="n">italic</span><span class="o">&lt;/</span><span class="n">i</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="n">b</span><span class="o">&gt;</span><span class="n">BOLD</span><span class="o">&lt;/</span><span class="n">b</span><span class="o">&gt;</span> <span class="n">plain</span> <span class="o">&lt;</span><span class="n">b</span><span class="o">&gt;</span><span class="n">BOLD</span><span class="o">&lt;/</span><span class="n">b</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="n">i</span><span class="o">&gt;</span><span class="n">italic</span><span class="o">&lt;/</span><span class="n">i</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Что ещё?</h3>
+
+<p>Обрабатывать говтовую строку не интересно, но если принимать от пользователя вводимые символы и одновременно с этим выводить результат в HTML, то мы получим самый настоящий интерактивный редактор для нашей разметки.</p>
+
+<p>Естественно, можно добавить к этому больше событий (в том числе и удаление символа), и получить, например, обработчик разметки <a href="http://ru.wikipedia.org/wiki/Markdown">MarkDown&#8217;а</a> как <a href="http://mouapp.com/">Mou</a>, но это выходит далеко за рамки обучающей статьи.</p>
+
+<h3>Заключение</h3>
+
+<p>Понимание автоматного программирования трудно перееоценить. На его основе построенна работа лексических анализаторов, событийно-ориентированных фреймворков (например <a href="http://twistedmatrix.com">Twisted&#8217;а</a>), регулярных выражений и т.д..</p>
+
+<p>Эта статья не ставит перед собой цель дать исчерпывающие ответы, а ставит цель заинтересовать читателя в этой теме.</p>
+
+<p>На этом всё. Спасибо что дочитали статью.</p>
+
+<p>Замечания, по прежнему, принимаются на <a href="&#109;&#x61;&#x69;&#108;&#116;&#x6f;&#58;&#115;&#x68;&#111;&#x6f;&#x6e;&#111;&#x69;&#x73;&#101;&#64;&#x67;&#x6d;&#x61;&#x69;&#x6c;&#x2e;&#99;&#111;&#109;&#46;">&#115;&#x68;&#x6f;&#x6f;&#x6e;&#111;&#105;&#x73;&#101;&#64;&#103;&#109;&#x61;&#105;&#x6c;&#46;&#99;&#x6f;&#x6d;&#x2e;</a></p>
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-09-16T08:59:00+04:00" pubdate data-updated="true">Sep 16<span>th</span>, 2013</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/blog/categories/event-driven/'>event-driven</a>, <a class='category' href='/blog/categories/pyhon/'>pyhon</a>, <a class='category' href='/blog/categories/state-machines/'>state machines</a>
+
+
+</div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		<a class="addthis_button_tweet"></a>
+		
+		
+		
+	</div>
+	
+</div>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2013
+
+    Alexander Kushnarev
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+
+
+
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-42658520-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+</body>
+</html>

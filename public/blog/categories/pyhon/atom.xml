@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: pyhon | Blog pythonista]]></title>
+  <link href="http://shoonoise.github.io/blog/categories/pyhon/atom.xml" rel="self"/>
+  <link href="http://shoonoise.github.io/"/>
+  <updated>2013-10-08T11:14:59+04:00</updated>
+  <id>http://shoonoise.github.io/</id>
+  <author>
+    <name><![CDATA[Alexander Kushnarev]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Автоматное программирование]]></title>
+    <link href="http://shoonoise.github.io/blog/2013/09/16/state-machines-in-python/"/>
+    <updated>2013-09-16T08:59:00+04:00</updated>
+    <id>http://shoonoise.github.io/blog/2013/09/16/state-machines-in-python</id>
+    <content type="html"><![CDATA[<p>Вместо эпиграфа приведу <a href="http://lkml.indiana.edu/hypermail/linux/kernel/0106.2/0405.html">цитату</a> умного <a href="http://ru.wikipedia.org/wiki/%D0%90%D0%BB%D0%B0%D0%BD_%D0%9A%D0%BE%D0%BA%D1%81">человека</a>. Касющуюся, впрочем, конкреного event-driven программирования:</p>
+
+<blockquote><p>«Компьютер — это конечный автомат. Потоковое программирование нужно тем, кто не умеет программировать конечные автоматы»</p></blockquote>
+
+<p>Так как никто не хочет быть в категории “неумех”, я сегодня постараюсь показать приём программирования условного автомата.</p>
+
+<p>В статье я буду пошагово описывать создание своего обработчика простой разметки текста на Python.</p>
+
+<!-- more -->
+
+
+<h3>Немного теории</h3>
+
+<p>Вместо того косноязычного определения что могу дать я, приведу цитату из википедии:</p>
+
+<blockquote><p>Автома́тное программи́рование — это парадигма программирования, при использовании которой программа или её фрагмент осмысливается как модель какого-либо формального автомата. В зависимости от конкретной задачи в автоматном программировании могут использоваться как конечные автоматы, так и автоматы более сложной структуры.</p></blockquote>
+
+<p>Давайте поговорим о автомате (<em>State Machine</em>). Чем он у нас определяется?</p>
+
+<ul>
+<li>Входные данные (с заранее известным возможным набором данных или алфавитом).</li>
+<li>Конечное множество состояний, которые может принимать автомат.</li>
+<li>Начальное состояние.</li>
+<li>Таблица переходов, определяющая правила перехода из состояния в состояние в зависимости от текущего состояния и входного значения (у нас детерминированный автомат).</li>
+</ul>
+
+
+<p><em>Если вы не прогуливали теорию автоматов в ВУЗе, как я, то вы и так это всё знаете.</em></p>
+
+<h3>Практика</h3>
+
+<p><strong>Задача:</strong></p>
+
+<p>В качестве задания я решил взять типичную для программирования автоматов задачу &ndash; простенький обработчик разметки.</p>
+
+<p>Наш обработчик будет поддерживать только 2 типа разметки:</p>
+
+<ul>
+<li>*<em>курсивное</em>* начертание</li>
+<li>**<strong>жирное</strong>** начертание</li>
+</ul>
+
+
+<p>На входе строка, в которой строки размеченны с помощью * и **, а на выходе &ndash; форматированный HTML.</p>
+
+<p><strong>Решение:</strong></p>
+
+<p><em>Определим количество возможных состояний.</em></p>
+
+<h5>Возможные состояния:</h5>
+
+<ul>
+<li>Начальное состояние &ndash; <code>plain_text</code></li>
+<li>Состояние <code>pre_bold</code> &ndash; когда встретили первую <code>*</code></li>
+<li>Состояние <code>bold</code> &ndash; когда встретили вторую <code>*</code> вподряд</li>
+<li>Состояние <code>italic</code> &ndash; когда после первой <code>*</code> у нас, по крайней мере, один обычный символ</li>
+<li>Состояние <code>pre_end_dold</code> &ndash; когда встретили первую закрывающую <code>*</code></li>
+</ul>
+
+
+<p>Как вы могли заметить, нам пришлось внести два не самых очевидных состояния &ndash; <code>pre_bold</code> и <code>pre_end_bold</code>.
+Дело в том, что когда мы получаем первый символ <code>*</code>, мы не можем однозначно сказать что от нас требуется италик или болд, и требуется ли вообще менять состояние, поэтому мы вынуждены ввести некие &ldquo;промежуточные&rdquo; состояния (костыль для сохранения детерминированности. Увеличиваем таблицу переходов, но упрощаем логику).</p>
+
+<p> <em>Определим правила перехода из одного состояние в другое.</em></p>
+
+<h5>Таблица переходов:</h5>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Input \ State</th>
+<th>plain_text  </th>
+<th>pre_bold    </th>
+<th>bold          </th>
+<th>italic        </th>
+<th>pre_end_bold</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td>*             </td>
+<td>pre_bold    </td>
+<td>bold        </td>
+<td>pre_end_bold  </td>
+<td>plain_text    </td>
+<td>plain_text  </td>
+</tr>
+<tr>
+<td></td>
+<td>other symbol  </td>
+<td>plain_text  </td>
+<td>italic      </td>
+<td>plain_text    </td>
+<td>plain_text    </td>
+<td>plain_text  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>В строках у нас описаны входные символы, у нас их может быть всего 2 типа: символ <code>*</code> и любой другой символ.
+В столбцах у нас описаны все наши состояния. На пересечении &ndash; состояние в которое переходим.
+То есть если мы находимся в состоянии <code>plain_text</code> и получаем на вход <code>*</code>, то мы переходим в состояние <code>pre_bold</code>.
+А в случае, если мы в состоянии <code>pre_bold</code> и получаем на вход символ отличный от <code>*</code>, то мы переходим в состоние <code>italic</code>.</p>
+
+<h3>Кодирование</h3>
+
+<p>А теперь самое интересное &ndash; перевод нашего решениея в код.</p>
+
+<p>В первом приближении у меня получилось, следующее:</p>
+
+<p>```python
+class SimpleMark(object):</p>
+
+<pre><code>PLAIN_TEXT = 'plain_text'
+PRE_BOLD = 'pre_bold'
+BOLD = 'bold'
+ITALIC = 'italic'
+PRE_END_BOLD = 'pre_end_bold'
+
+def __init__(self):
+    self.__state = self.PLAIN_TEXT
+    self.__buffer = ''
+
+def __handle_input(self, symbol):
+    if symbol == '*':
+        if self.__state == self.PLAIN_TEXT:
+            self.__state = self.PRE_BOLD
+        elif self.__state == self.PRE_BOLD:
+            self.__state = self.BOLD
+            self.__buffer += '&lt;b&gt;'
+        elif self.__state == self.BOLD:
+            self.__state = self.PRE_END_BOLD
+        elif self.__state == self.ITALIC:
+            self.__state = self.PLAIN_TEXT
+            self.__buffer += '&lt;/i&gt;'
+        elif self.__state == self.PRE_END_BOLD:
+            self.__buffer += '&lt;/b&gt;'
+            self.__state = self.PLAIN_TEXT
+    else:
+        if self.__state == self.PRE_BOLD:
+            self.__state = self.ITALIC
+            self.__buffer += '&lt;i&gt;' + symbol
+        else:
+            self.__buffer += symbol
+</code></pre>
+
+<p>```</p>
+
+<p>Пока выглядит как то <em>не_очень</em>, правда?</p>
+
+<p>Давайте попробуем зарефакторить наш код.</p>
+
+<p>Во-первых, куча <code>if, elif и else</code> выглядит неприятно (особенно, если в вашем любимом языке программирования есть конструкция <code>switch/case</code>). Во-вторых, было бы не плохо вынести работу каждого шага в отдельную функцию (что с точки зрения автоматов является идеологический верным).</p>
+
+<p><em>Вынесем работу шагов автомата в функции:</em></p>
+
+<p>```python
+class SimpleMark(object):</p>
+
+<pre><code>PLAIN_TEXT = 'plain_text'
+PRE_BOLD = 'pre_bold'
+BOLD = 'bold'
+ITALIC = 'italic'
+PRE_END_BOLD = 'pre_end_bold'
+
+def __init__(self):
+    self.__state = self.PLAIN_TEXT
+    self.__buffer = ''
+
+def __set_pre_bold(self):
+    self.__state = self.PRE_BOLD
+
+def __set_bold(self):
+    self.__state = self.BOLD
+    self.__buffer += '&lt;b&gt;'
+
+def __set_pre_end_bold(self):
+    self.__state = self.PRE_END_BOLD
+
+def __set_italic(self, symbol):
+    self.__state = self.ITALIC
+    self.__buffer += '&lt;i&gt;' + symbol
+
+def __set_end_italic(self):
+    self.__state = self.PLAIN_TEXT
+    self.__buffer += '&lt;/i&gt;'
+
+def __set_end_bold(self):
+    self.__buffer += '&lt;/b&gt;'
+    self.__state = self.PLAIN_TEXT
+
+def __handle_input(self, symbol):
+    if symbol == '*':
+        if self.__state == self.PLAIN_TEXT:
+            self.__set_pre_bold()
+        elif self.__state == self.PRE_BOLD:
+            self.__set_bold()
+        elif self.__state == self.BOLD:
+            self.__set_pre_end_bold()
+        elif self.__state == self.ITALIC:
+            self.__set_end_italic()
+        elif self.__state == self.PRE_END_BOLD:
+            self.__set_end_bold()
+    else:
+        if self.__state == self.PRE_BOLD:
+            self.__set_italic(symbol)
+        else:
+            self.__buffer += symbol
+</code></pre>
+
+<p>```</p>
+
+<p><em>А теперь воспользуемся обычным рецептом эмуляции <code>switch/case</code>:</em></p>
+
+<p>```python
+class SimpleMark(object):</p>
+
+<pre><code>PLAIN_TEXT = 'plain_text'
+PRE_BOLD = 'pre_bold'
+BOLD = 'bold'
+ITALIC = 'italic'
+PRE_END_BOLD = 'pre_end_bold'
+
+def __init__(self):
+    self.__state = self.PLAIN_TEXT
+    self.__buffer = ''
+
+def __set_pre_bold(self):
+    self.__state = self.PRE_BOLD
+
+def __set_bold(self):
+    self.__state = self.BOLD
+    self.__buffer += '&lt;b&gt;'
+
+def __set_pre_end_bold(self):
+    self.__state = self.PRE_END_BOLD
+
+def __set_italic(self, symbol):
+    self.__state = self.ITALIC
+    self.__buffer += '&lt;i&gt;' + symbol
+
+def __set_end_italic(self):
+    self.__state = self.PLAIN_TEXT
+    self.__buffer += '&lt;/i&gt;'
+
+def __set_end_bold(self):
+    self.__buffer += '&lt;/b&gt;'
+    self.__state = self.PLAIN_TEX
+
+def __update_buffer(self, symbol):
+    self.__buffer += symbol
+
+def __handle_input(self, symbol):
+    jump_table_1 = {
+        self.PLAIN_TEXT: self.__set_pre_bold,
+        self.PRE_BOLD: self.__set_bold,
+        self.BOLD: self.__set_pre_end_bold,
+        self.ITALIC: self.__set_end_italic,
+        self.PRE_END_BOLD: self.__set_end_bold
+    }
+
+    jump_table_2 = {
+        self.PLAIN_TEXT: self.__update_buffer,
+        self.PRE_BOLD: self.__set_italic,
+        self.BOLD: self.__update_buffer,
+        self.ITALIC: self.__update_buffer,
+        self.PRE_END_BOLD: self.__update_buffer
+    }
+
+    if symbol == '*':
+        jump_table_1[self.__state]()
+    else:
+        jump_table_2[self.__state](symbol)
+</code></pre>
+
+<p>```</p>
+
+<p>Помимо того что я использовал словарь, что бы определить связь состояние-действие для каждого из возможных состояний, я выделил ещё одну функцию <code>__update_buffer</code>, что бы была возможность явно описать переходы для второй строчки (в коде <code>jump_table_2</code>) нашей таблицы.</p>
+
+<p>Теперь сделаем наш автомат &ldquo;рабочим&rdquo;.</p>
+
+<p>```python
+class SimpleMark(object):</p>
+
+<pre><code>PLAIN_TEXT = 'plain_text'
+PRE_BOLD = 'pre_bold'
+BOLD = 'bold'
+ITALIC = 'italic'
+PRE_END_BOLD = 'pre_end_bold'
+
+def __init__(self):
+    self.__state = self.PLAIN_TEXT
+    self.__buffer = ''
+
+@property
+def output(self):
+    try:
+        return self.__buffer[-1]
+    except IndexError:
+        print "Have no output data yet."
+
+@property
+def result(self):
+    return self.__buffer
+
+def __set_pre_bold(self):
+    self.__state = self.PRE_BOLD
+
+def __set_bold(self):
+    self.__state = self.BOLD
+    return '&lt;b&gt;'
+
+def __set_pre_end_bold(self):
+    self.__state = self.PRE_END_BOLD
+
+def __set_italic(self, symbol):
+    self.__state = self.ITALIC
+    return '&lt;i&gt;' + symbol
+
+def __set_end_italic(self):
+    self.__state = self.PLAIN_TEXT
+    return '&lt;/i&gt;'
+
+def __set_end_bold(self):
+    self.__state = self.PLAIN_TEXT
+    return '&lt;/b&gt;'
+
+def __update_buffer(self, symbol):
+    return symbol
+
+def __handle_input(self, symbol):
+    jump_table_1 = {
+        self.PLAIN_TEXT: self.__set_pre_bold,
+        self.PRE_BOLD: self.__set_bold,
+        self.BOLD: self.__set_pre_end_bold,
+        self.ITALIC: self.__set_end_italic,
+        self.PRE_END_BOLD: self.__set_end_bold
+    }
+
+    jump_table_2 = {
+        self.PLAIN_TEXT: self.__update_buffer,
+        self.PRE_BOLD: self.__set_italic,
+        self.BOLD: self.__update_buffer,
+        self.ITALIC: self.__update_buffer,
+        self.PRE_END_BOLD: self.__update_buffer
+    }
+
+    if symbol == '*':
+        self.__buffer += jump_table_1[self.__state]() or ''
+    else:
+        self.__buffer += jump_table_2[self.__state](symbol)
+
+def input(self, symbol):
+    self.__handle_input(symbol)
+</code></pre>
+
+<p>if <strong>name</strong> == &lsquo;<strong>main</strong>&rsquo;:</p>
+
+<pre><code>machine = SimpleMark()
+
+line = "*italic* **BOLD** plain **BOLD** *italic*"
+for symbol in line:
+    machine.input(symbol)
+print machine.result
+</code></pre>
+
+<p>```</p>
+
+<p>Изменения:</p>
+
+<ul>
+<li><p>Добавил свойство output, которое возвращает текущее значение на выходе нашего автомата</p></li>
+<li><p>Добавил метод input</p></li>
+<li><p>Уменьшил количество мест, где меняется состояние выхода нашего автомата до 2-х (ибо нефиг)</p></li>
+</ul>
+
+
+<p>Результат:</p>
+
+<p>```
+$ ⮀ python state_machine.py
+<i>italic</i> <b>BOLD</b> plain <b>BOLD</b> <i>italic</i></p>
+
+<p>```</p>
+
+<h3>Что ещё?</h3>
+
+<p>Обрабатывать говтовую строку не интересно, но если принимать от пользователя вводимые символы и одновременно с этим выводить результат в HTML, то мы получим самый настоящий интерактивный редактор для нашей разметки.</p>
+
+<p>Естественно, можно добавить к этому больше событий (в том числе и удаление символа), и получить, например, обработчик разметки <a href="http://ru.wikipedia.org/wiki/Markdown">MarkDown'а</a> как <a href="http://mouapp.com/">Mou</a>, но это выходит далеко за рамки обучающей статьи.</p>
+
+<h3>Заключение</h3>
+
+<p>Понимание автоматного программирования трудно перееоценить. На его основе построенна работа лексических анализаторов, событийно-ориентированных фреймворков (например <a href="http://twistedmatrix.com">Twisted'а</a>), регулярных выражений и т.д..</p>
+
+<p>Эта статья не ставит перед собой цель дать исчерпывающие ответы, а ставит цель заинтересовать читателя в этой теме.</p>
+
+<p>На этом всё. Спасибо что дочитали статью.</p>
+
+<p>Замечания, по прежнему, принимаются на <a href="&#x6d;&#97;&#x69;&#108;&#116;&#x6f;&#x3a;&#115;&#104;&#111;&#x6f;&#110;&#111;&#x69;&#115;&#x65;&#x40;&#103;&#x6d;&#x61;&#105;&#x6c;&#46;&#x63;&#x6f;&#x6d;&#x2e;">&#115;&#104;&#x6f;&#x6f;&#x6e;&#x6f;&#105;&#x73;&#x65;&#64;&#x67;&#109;&#97;&#x69;&#x6c;&#46;&#99;&#111;&#x6d;&#x2e;</a></p>
+]]></content>
+  </entry>
+  
+</feed>
